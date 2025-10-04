@@ -1,1 +1,69 @@
-local a=getgenv().ADDRESS or game:HttpGet("https://raw.githubusercontent.com/2dsgirl08/1point2/refs/heads/main/address.txt"):match("^%s*(.-)%s*$")local b=WebSocket.connect("wss://"..a.."/ws")local c=game:GetService("HttpService")local d=game:GetService("Players")local e=d.LocalPlayer;xpcall(function()local f=request({Url="https://"..a.."/hwid",Method="POST",Headers={["Content-Type"]="application/json"},Body=c:JSONEncode({key=getgenv().SCRIPT_KEY})})if f.StatusCode~=200 then b:Close()return e:Kick("[1p2] failed first handshake (invalid key?)")end;local g=c:JSONDecode(f.Body)local h=g["challenge"]b:Send(c:JSONEncode({key=getgenv().SCRIPT_KEY,challenge=h}))local i=""b.OnMessage:Connect(function(j)i=j end)local k=os.clock()while i==""and os.clock()-k<2 do task.wait()end;if i=="INVALID_HWID"then return e:Kick("[1p2] hwid difference (contact devs)")end;if i==""then return e:Kick("[1p2] failed second handshake (tampering, failed to pass challenge)")end;loadstring(i)()(b,h)end,function(l)b:Close()return e:Kick("[1p2] unexpected computation error",l)end)
+-- Script `loader.lua`
+-- Loader script for 1p2
+
+-- @ constants
+
+local ADDRESS = getgenv().ADDRESS or game:HttpGet("https://raw.githubusercontent.com/2dsgirl08/1point2/refs/heads/main/address.txt"):match("^%s*(.-)%s*$")
+local SOCKET = WebSocket.connect("wss://" .. ADDRESS .. "/ws")
+
+-- @ services
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+
+-- @ variables
+
+local Player = Players.LocalPlayer
+
+-- @ main
+
+xpcall(function()
+	local response = request({
+		Url = "https://" .. ADDRESS .. "/hwid",
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/json"
+		},
+		Body = HttpService:JSONEncode({key = getgenv().SCRIPT_KEY})
+	})
+
+	if response.StatusCode ~= 200 then
+		SOCKET:Close()
+		return Player:Kick("[1p2] failed first handshake (invalid key?)")
+	end
+
+	local body = HttpService:JSONDecode(response.Body)
+	local challenge = body["challenge"]
+
+	SOCKET:Send(HttpService:JSONEncode({
+		key = getgenv().SCRIPT_KEY,
+		challenge = challenge
+	}))
+
+	local scriptContent = ""
+
+	SOCKET.OnMessage:Connect(function(content)
+		scriptContent = content
+	end) -- fuck emu exploits SHITTY websocket library
+
+	local timeout = os.clock()
+
+	while scriptContent == "" and (os.clock() - timeout) < 15 do
+		task.wait()
+	end
+
+	if scriptContent == "INVALID_HWID" then
+		return Player:Kick("[1p2] hwid difference (contact devs)")
+	end
+
+	if scriptContent == "" then
+		return Player:Kick("[1p2] failed second handshake (tampering, failed to pass challenge)")
+	end
+
+	loadstring(scriptContent)()(SOCKET, challenge)
+end, function(err)
+	warn(err)
+	SOCKET:Close()
+
+	return Player:Kick("[1p2] unexpected computation error", err)
+end)
